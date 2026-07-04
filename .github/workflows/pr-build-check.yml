@@ -1,0 +1,42 @@
+name: PR Build Check
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'examples/**'
+      - 'variants/**'
+      - 'platformio.ini'
+      - '.github/workflows/pr-build-check.yml'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'examples/**'
+      - 'variants/**'
+      - 'platformio.ini'
+      - '.github/workflows/pr-build-check.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - Nesso_N1_companion_radio_usb
+          - Nesso_N1_companion_radio_ble
+          - Nesso_N1_repeater
+          - Nesso_N1_room_server
+          - Nesso_N1_kiss_modem
+
+    steps:
+      - name: Clone Repo
+        uses: actions/checkout@v6
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build-environment
+
+      - name: Build ${{ matrix.environment }}
+        run: pio run -e ${{ matrix.environment }}
