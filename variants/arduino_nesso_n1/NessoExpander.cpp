@@ -31,7 +31,7 @@ bool NessoExpander::writeRegister(uint8_t address, uint8_t reg, uint8_t value) {
 bool NessoExpander::readRegister(uint8_t address, uint8_t reg, uint8_t& value) {
   Wire.beginTransmission(address);
   Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.endTransmission() != 0) return false;
   if (Wire.requestFrom(address, (uint8_t)1) != 1) return false;
   value = Wire.read();
   return true;
@@ -76,10 +76,21 @@ bool NessoExpander::ensure(uint8_t address) {
 }
 
 bool NessoExpander::begin() {
-  return ensure(NESSO_EXPANDER_E0) && ensure(NESSO_EXPANDER_E1);
+  for (uint8_t attempt = 0; attempt < 3; attempt++) {
+    bool e0 = ensure(NESSO_EXPANDER_E0);
+    bool e1 = ensure(NESSO_EXPANDER_E1);
+    if (e0 && e1) return true;
+    delay(20);
+  }
+  return isInitialized(NESSO_EXPANDER_E0) && isInitialized(NESSO_EXPANDER_E1);
 }
 
-#ifdef NESSO_DIAG
+bool NessoExpander::isInitialized(uint8_t address) const {
+  int idx = indexFor(address);
+  return idx >= 0 && initialized[idx];
+}
+
+	#ifdef NESSO_DIAG
 bool NessoExpander::debugReadRegister(uint8_t address, uint8_t reg, uint8_t& value) {
   return readRegister(address, reg, value);
 }

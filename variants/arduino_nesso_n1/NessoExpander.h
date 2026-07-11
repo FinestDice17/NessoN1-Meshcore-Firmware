@@ -37,12 +37,13 @@ class NessoExpander {
 
 public:
   bool begin();
-  bool pinMode(NessoExpanderPin pin, uint8_t mode);
-  bool digitalWrite(NessoExpanderPin pin, uint8_t value);
-  int digitalRead(NessoExpanderPin pin);
-#ifdef NESSO_DIAG
-  bool debugReadRegister(uint8_t address, uint8_t reg, uint8_t& value);
-#endif
+	  bool pinMode(NessoExpanderPin pin, uint8_t mode);
+	  bool digitalWrite(NessoExpanderPin pin, uint8_t value);
+	  int digitalRead(NessoExpanderPin pin);
+	  bool isInitialized(uint8_t address) const;
+	#ifdef NESSO_DIAG
+	  bool debugReadRegister(uint8_t address, uint8_t reg, uint8_t& value);
+	#endif
 };
 
 class NessoExpanderButton {
