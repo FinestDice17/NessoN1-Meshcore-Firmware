@@ -54,7 +54,16 @@ size_t ArduinoSerialInterface::checkRecvFrame(uint8_t dest[]) {
       case RECV_STATE_LEN1_FOUND:
         _frame_len |= ((uint16_t)c) << 8;   // MSB
         rx_len = 0;
-        _state = _frame_len > 0 ? RECV_STATE_LEN2_FOUND : RECV_STATE_IDLE;
+        // Guard against a corrupted/desynced length. The protocol never sends a frame
+        // larger than MAX_FRAME_SIZE, so a bigger value means a byte was dropped/mangled
+        // (e.g. on a flaky USB-Serial-JTAG link). Treat it as a desync and resync from the
+        // next '<' instead of stalling for up to 65535 bytes, which would otherwise wedge
+        // the link (swallowing every retry) until a power-cycle.
+        if (_frame_len == 0 || _frame_len > MAX_FRAME_SIZE) {
+          _state = RECV_STATE_IDLE;
+        } else {
+          _state = RECV_STATE_LEN2_FOUND;
+        }
         break;
       default:
         if (rx_len < MAX_FRAME_SIZE) {

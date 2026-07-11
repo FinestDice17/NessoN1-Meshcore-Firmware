@@ -112,6 +112,22 @@ void halt() {
 #endif
 
 void setup() {
+  // ---- ESP32-C6 / USB-Serial-JTAG (HWCDC) reliability tuning ----
+  // The C6 (and C3/H2) boot their USB console on the USB-Serial-JTAG peripheral, i.e.
+  // arduino-esp32's HWCDC. Its RX path is a small 256-byte single-byte FreeRTOS queue
+  // filled from a 64-byte HW FIFO in an ISR that SILENTLY DROPS bytes once the queue is
+  // full, and its write() blocks the (single-threaded) main loop for up to tx_timeout_ms
+  // when the host is slow to drain. Under bidirectional companion-serial load the largest
+  // inbound frame (CMD_SEND_CHANNEL_DATA, ~80 bytes) overflows RX; a dropped length byte
+  // then desyncs the frame parser permanently (device goes silent until a power-cycle).
+  // The ESP32-S3 companion build uses native USB-OTG CDC and is unaffected. Enlarge both
+  // buffers and make writes non-blocking so the loop can always keep draining RX. These
+  // must run BEFORE begin() (begin only installs its 256-byte defaults if none preset).
+#if defined(CONFIG_IDF_TARGET_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32H2)
+  Serial.setRxBufferSize(4096);
+  Serial.setTxBufferSize(4096);
+  Serial.setTxTimeoutMs(0);
+#endif
   Serial.begin(115200);
 
   board.begin();
