@@ -3,6 +3,12 @@
 #include <Arduino.h> // needed for PlatformIO
 #include <Mesh.h>
 
+#if defined(NESSO_SMART_COMPANION)
+extern bool nessoHandleCompanionModeCommand(const char* command, char* reply, size_t reply_len);
+extern uint8_t nessoGetCompanionModeCode();
+extern bool nessoSetCompanionModeCode(uint8_t mode_code);
+#endif
+
 #define CMD_APP_START                 1
 #define CMD_SEND_TXT_MSG              2
 #define CMD_SEND_CHANNEL_TXT_MSG      3
@@ -46,7 +52,8 @@
 #define CMD_SET_CUSTOM_VAR            41
 #define CMD_GET_ADVERT_PATH           42
 #define CMD_GET_TUNING_PARAMS         43
-// NOTE: CMD range 44..49 parked, potentially for WiFi operations
+#define CMD_NESSO_COMPANION_MODE      44   // Nesso smart: query/set BLE or Wi-Fi mode
+// NOTE: CMD range 45..49 parked, potentially for WiFi operations
 #define CMD_SEND_BINARY_REQ           50
 #define CMD_FACTORY_RESET             51
 #define CMD_SEND_PATH_DISCOVERY_REQ   52
@@ -150,6 +157,14 @@ void MyMesh::writeOKFrame() {
   buf[0] = RESP_CODE_OK;
   _serial->writeFrame(buf, 1);
 }
+
+static void writeOKValueFrame(BaseSerialInterface* serial, uint32_t value) {
+  uint8_t buf[5];
+  buf[0] = RESP_CODE_OK;
+  memcpy(&buf[1], &value, sizeof(value));
+  serial->writeFrame(buf, sizeof(buf));
+}
+
 void MyMesh::writeErrFrame(uint8_t err_code) {
   uint8_t buf[2];
   buf[0] = RESP_CODE_ERR;
@@ -1450,6 +1465,21 @@ void MyMesh::handleCmdFrame(size_t len) {
       savePrefs();
       writeOKFrame();
     }
+#if defined(NESSO_SMART_COMPANION)
+  } else if (cmd_frame[0] == CMD_NESSO_COMPANION_MODE) {
+    if (len == 1 || cmd_frame[1] == 0) {
+      writeOKValueFrame(_serial, nessoGetCompanionModeCode());
+    } else if (cmd_frame[1] == 1 || cmd_frame[1] == 2) {
+      uint8_t mode_code = cmd_frame[1] == 2 ? 1 : 0;
+      if (nessoSetCompanionModeCode(mode_code)) {
+        writeOKValueFrame(_serial, mode_code);
+      } else {
+        writeErrFrame(ERR_CODE_FILE_IO_ERROR);
+      }
+    } else {
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+    }
+#endif
   } else if (cmd_frame[0] == CMD_REBOOT && memcmp(&cmd_frame[1], "reboot", 6) == 0) {
     if (dirty_contacts_expiry) { // is there are pending dirty contacts write needed?
       saveContacts();
@@ -2023,17 +2053,68 @@ void MyMesh::checkCLIRescueCmd() {
   if (len > 0 && cli_command[len - 1] == '\r') {  // received complete line
     cli_command[len - 1] = 0;  // replace newline with C string null terminator
 
-    if (memcmp(cli_command, "set ", 4) == 0) {
-      const char* config = &cli_command[4];
-      if (memcmp(config, "pin ", 4) == 0) {
+#if defined(NESSO_SMART_COMPANION)
+	    char mode_reply[120] = {0};
+	    if (nessoHandleCompanionModeCommand(cli_command, mode_reply, sizeof(mode_reply))) {
+	      Serial.printf("  > %s\n", mode_reply);
+	    } else
+#endif
+	    if (memcmp(cli_command, "set ", 4) == 0) {
+	      const char* config = &cli_command[4];
+	      if (memcmp(config, "pin ", 4) == 0) {
         _prefs.ble_pin = atoi(&config[4]);
         savePrefs();
         Serial.printf("  > pin is now %06d\n", _prefs.ble_pin);
       } else {
-        Serial.printf("  Error: unknown config: %s\n", config);
-      }
-    } else if (strcmp(cli_command, "rebuild") == 0) {
-      bool success = _store->formatFileSystem();
+	        Serial.printf("  Error: unknown config: %s\n", config);
+	      }
+	    } else if (strcmp(cli_command, "doctor") == 0 || strcmp(cli_command, "nesso doctor") == 0) {
+	      char diag[220];
+	      bool ok = board.formatBoardDiagnostics(diag, sizeof(diag));
+	      Serial.printf("  > %s\n", diag);
+	      Serial.printf("  > status: %s\n", ok ? "ok" : "warning");
+	    } else if (memcmp(cli_command, "preset ", 7) == 0) {
+	      const char* preset = &cli_command[7];
+	      bool ok = true;
+	      if (strcmp(preset, "range") == 0) {
+	        _prefs.airtime_factor = 1.5f;
+	        _prefs.rx_delay_base = 0.0f;
+	        _prefs.path_hash_mode = 1;
+	        _prefs.multi_acks = 1;
+	        _prefs.rx_boosted_gain = 1;
+	      } else if (strcmp(preset, "dense") == 0) {
+	        _prefs.airtime_factor = 3.0f;
+	        _prefs.rx_delay_base = 3.0f;
+	        _prefs.path_hash_mode = 1;
+	        _prefs.multi_acks = 0;
+	        _prefs.rx_boosted_gain = 0;
+	      } else if (strcmp(preset, "balanced") == 0) {
+	        _prefs.airtime_factor = 1.0f;
+	        _prefs.rx_delay_base = 0.0f;
+	        _prefs.path_hash_mode = 1;
+	        _prefs.multi_acks = 0;
+	        _prefs.rx_boosted_gain = 1;
+	      } else {
+	        ok = false;
+	      }
+	      if (ok) {
+	        radio_driver.setRxBoostedGainMode(_prefs.rx_boosted_gain);
+	        savePrefs();
+	        Serial.printf("  > preset applied: %s\n", preset);
+	      } else {
+	        Serial.println("  Error: preset range|balanced|dense");
+	      }
+	    } else if (strcmp(cli_command, "preset") == 0) {
+	      Serial.println("  > presets: range, balanced, dense");
+	    } else if (strcmp(cli_command, "start ota") == 0) {
+	      char reply[160] = {0};
+	      if (board.startOTAUpdate(_prefs.node_name, reply)) {
+	        Serial.printf("  > %s\n", reply);
+	      } else {
+	        Serial.printf("  Error: %s\n", reply[0] ? reply : "OTA unsupported");
+	      }
+	    } else if (strcmp(cli_command, "rebuild") == 0) {
+	      bool success = _store->formatFileSystem();
       if (success) {
         _store->saveMainIdentity(self_id);
         savePrefs();

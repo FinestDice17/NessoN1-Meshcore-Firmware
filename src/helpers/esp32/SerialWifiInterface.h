@@ -24,23 +24,29 @@ class SerialWifiInterface : public BaseSerialInterface {
 
   FrameHeader received_frame_header;
 
-  #define FRAME_QUEUE_SIZE  4
-  int recv_queue_len;
-  Frame recv_queue[FRAME_QUEUE_SIZE];
-  int send_queue_len;
-  Frame send_queue[FRAME_QUEUE_SIZE];
+	#ifndef WIFI_FRAME_QUEUE_SIZE
+	  #define WIFI_FRAME_QUEUE_SIZE  6
+	#endif
+	  uint8_t recv_queue_head;
+	  uint8_t recv_queue_len;
+	  Frame recv_queue[WIFI_FRAME_QUEUE_SIZE];
+	  uint8_t send_queue_head;
+	  uint8_t send_queue_len;
+	  Frame send_queue[WIFI_FRAME_QUEUE_SIZE];
 
-  void clearBuffers() { recv_queue_len = 0; send_queue_len = 0; }
+	  bool pushQueue(Frame queue[], uint8_t head, uint8_t& len, const uint8_t src[], size_t src_len);
+	  bool popQueue(Frame queue[], uint8_t& head, uint8_t& len, Frame& dest);
+	  void clearBuffers() { recv_queue_head = send_queue_head = recv_queue_len = send_queue_len = 0; }
 
 protected:
 
 public:
   SerialWifiInterface() : server(WiFiServer()), client(WiFiClient()) {
-    deviceConnected = false;
-    _isEnabled = false;
-    _last_write = 0;
-    send_queue_len = recv_queue_len = 0;
-    received_frame_header.type = 0;
+	    deviceConnected = false;
+	    _isEnabled = false;
+	    _last_write = 0;
+	    send_queue_head = recv_queue_head = send_queue_len = recv_queue_len = 0;
+	    received_frame_header.type = 0;
     received_frame_header.length = 0;
   }
 

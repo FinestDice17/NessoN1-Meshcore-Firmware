@@ -88,10 +88,13 @@ class HomeScreen : public UIScreen {
     FIRST,
     RECENT,
     RADIO,
-    BLUETOOTH,
-    ADVERT,
-#if ENV_INCLUDE_GPS == 1
-    GPS,
+	    BLUETOOTH,
+	    ADVERT,
+#if defined(NESSO_N1_BOARD)
+	    DIAGNOSTIC,
+#endif
+	#if ENV_INCLUDE_GPS == 1
+	    GPS,
 #endif
 #if UI_SENSORS_PAGE == 1
     SENSORS,
@@ -218,8 +221,20 @@ public:
       display.drawTextCentered(display.width() / 2, 20, tmp);
 
       #ifdef WIFI_SSID
-        IPAddress ip = WiFi.localIP();
-        snprintf(tmp, sizeof(tmp), "IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+        #ifdef WIFI_AP_MODE
+          IPAddress ip = WiFi.softAPIP();
+        #else
+          IPAddress ip = WiFi.localIP();
+        #endif
+        if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0) {
+          #ifdef NESSO_SMART_COMPANION
+            snprintf(tmp, sizeof(tmp), "MODE:BLE");
+          #else
+            snprintf(tmp, sizeof(tmp), "IP: 0.0.0.0");
+          #endif
+        } else {
+          snprintf(tmp, sizeof(tmp), "IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+        }
         display.setTextSize(1);
         display.drawTextCentered(display.width() / 2, 54, tmp);
       #endif
@@ -228,11 +243,16 @@ public:
         display.setTextSize(1);
         display.drawTextCentered(display.width() / 2, 43, "< Connected >");
 
-      } else if (the_mesh.getBLEPin() != 0) { // BT pin
+      } else if (the_mesh.getBLEPin() != 0) { // BT state
         display.setColor(DisplayDriver::RED);
+      #if defined(BLE_OPEN_GATT) && BLE_OPEN_GATT
+        display.setTextSize(1);
+        display.drawTextCentered(display.width() / 2, 43, "BLE Ready");
+      #else
         display.setTextSize(2);
         sprintf(tmp, "Pin:%d", the_mesh.getBLEPin());
         display.drawTextCentered(display.width() / 2, 43, tmp);
+      #endif
       }
     } else if (_page == HomePage::RECENT) {
       the_mesh.getRecentlyHeard(recent, UI_RECENT_LIST_SIZE);
@@ -285,12 +305,34 @@ public:
           32, 32);
       display.setTextSize(1);
       display.drawTextCentered(display.width() / 2, 64 - 11, "toggle: " PRESS_LABEL);
-    } else if (_page == HomePage::ADVERT) {
-      display.setColor(DisplayDriver::GREEN);
-      display.drawXbm((display.width() - 32) / 2, 18, advert_icon, 32, 32);
-      display.drawTextCentered(display.width() / 2, 64 - 11, "advert: " PRESS_LABEL);
-#if ENV_INCLUDE_GPS == 1
-    } else if (_page == HomePage::GPS) {
+	    } else if (_page == HomePage::ADVERT) {
+	      display.setColor(DisplayDriver::GREEN);
+	      display.drawXbm((display.width() - 32) / 2, 18, advert_icon, 32, 32);
+	      display.drawTextCentered(display.width() / 2, 64 - 11, "advert: " PRESS_LABEL);
+#if defined(NESSO_N1_BOARD)
+	    } else if (_page == HomePage::DIAGNOSTIC) {
+	      const uint16_t batt = board.getBattMilliVolts();
+	      const bool external = board.isExternalPowered();
+	      const bool e0 = nessoExpander.isInitialized(NESSO_EXPANDER_E0);
+	      const bool e1 = nessoExpander.isInitialized(NESSO_EXPANDER_E1);
+	      const int loraEn = nessoExpander.digitalRead(NESSO_LORA_ENABLE);
+	      const int lnaEn = nessoExpander.digitalRead(NESSO_LORA_LNA_ENABLE);
+	      display.setColor(DisplayDriver::YELLOW);
+	      display.setTextSize(1);
+	      display.drawTextCentered(display.width() / 2, 20, "Nesso Doctor");
+	      display.setColor(DisplayDriver::GREEN);
+	      display.setCursor(0, 31);
+	      sprintf(tmp, "BAT:%umV %s", batt, external ? "USB" : "BATT");
+	      display.print(tmp);
+	      display.setCursor(0, 42);
+	      sprintf(tmp, "EXP:%s/%s L:%d A:%d", e0 ? "ok" : "bad", e1 ? "ok" : "bad", loraEn, lnaEn);
+	      display.print(tmp);
+	      display.setCursor(0, 53);
+	      sprintf(tmp, "NSS:%d BUSY:%d DIO:%d", digitalRead(P_LORA_NSS), digitalRead(P_LORA_BUSY), digitalRead(P_LORA_DIO_1));
+	      display.print(tmp);
+#endif
+	#if ENV_INCLUDE_GPS == 1
+	    } else if (_page == HomePage::GPS) {
       LocationProvider* nmea = sensors.getLocationProvider();
       char buf[50];
       int y = 18;
@@ -433,16 +475,24 @@ public:
       }
       return true;
     }
-    if (c == KEY_ENTER && _page == HomePage::ADVERT) {
-      _task->notify(UIEventType::ack);
-      if (the_mesh.advert()) {
+	    if (c == KEY_ENTER && _page == HomePage::ADVERT) {
+	      _task->notify(UIEventType::ack);
+	      if (the_mesh.advert()) {
         _task->showAlert("Advert sent!", 1000);
       } else {
         _task->showAlert("Advert failed..", 1000);
-      }
-      return true;
-    }
-#if ENV_INCLUDE_GPS == 1
+	      }
+	      return true;
+	    }
+#if defined(NESSO_N1_BOARD)
+	    if (c == KEY_ENTER && _page == HomePage::DIAGNOSTIC) {
+	      char diag[200];
+	      bool ok = board.formatBoardDiagnostics(diag, sizeof(diag));
+	      _task->showAlert(ok ? "Doctor OK" : "Doctor warning", 1200);
+	      return true;
+	    }
+#endif
+	#if ENV_INCLUDE_GPS == 1
     if (c == KEY_ENTER && _page == HomePage::GPS) {
       _task->toggleGPS();
       return true;
