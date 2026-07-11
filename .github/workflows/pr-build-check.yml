@@ -27,6 +27,9 @@ jobs:
         environment:
           - Nesso_N1_companion_radio_usb
           - Nesso_N1_companion_radio_ble
+          - Nesso_N1_companion_radio_wifi
+          - Nesso_N1_companion_radio_smart
+          - Nesso_N1_companion_radio_smart_ota
           - Nesso_N1_repeater
           - Nesso_N1_room_server
           - Nesso_N1_kiss_modem
