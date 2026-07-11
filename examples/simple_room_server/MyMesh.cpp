@@ -1,5 +1,11 @@
 #include "MyMesh.h"
 
+#ifdef NESSO_DERIVE_ADMIN_PASSWORD
+static void deriveNessoPassword(char* dest, size_t dest_len, const char* prefix, const uint8_t* pub_key) {
+  snprintf(dest, dest_len, "%s%02X%02X%02X%02X", prefix, pub_key[0], pub_key[1], pub_key[2], pub_key[3]);
+}
+#endif
+
 #define REPLY_DELAY_MILLIS          1500
 #define PUSH_NOTIFY_DELAY_MILLIS    2000
 #define SYNC_PUSH_INTERVAL          1200
@@ -676,6 +682,25 @@ void MyMesh::begin(FILESYSTEM *fs) {
 
   acl.load(_fs, self_id);
   region_map.load(_fs);
+
+#ifdef NESSO_DERIVE_ADMIN_PASSWORD
+  bool changed = false;
+  if (strcmp(_prefs.password, "password") == 0 || strcmp(_prefs.password, ADMIN_PASSWORD) == 0) {
+    deriveNessoPassword(_prefs.password, sizeof(_prefs.password), "n1-", self_id.pub_key);
+    changed = true;
+  }
+  if (strcmp(_prefs.guest_password, "hello") == 0
+#ifdef ROOM_PASSWORD
+      || strcmp(_prefs.guest_password, ROOM_PASSWORD) == 0
+#endif
+  ) {
+    deriveNessoPassword(_prefs.guest_password, sizeof(_prefs.guest_password), "room-", self_id.pub_key);
+    changed = true;
+  }
+  if (changed) {
+    _cli.savePrefs(_fs);
+  }
+#endif
 
   // establish default-scope
   {

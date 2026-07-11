@@ -1,6 +1,12 @@
 #include "MyMesh.h"
 #include <algorithm>
 
+#ifdef NESSO_DERIVE_ADMIN_PASSWORD
+static void deriveNessoPassword(char* dest, size_t dest_len, const char* prefix, const uint8_t* pub_key) {
+  snprintf(dest, dest_len, "%s%02X%02X%02X%02X", prefix, pub_key[0], pub_key[1], pub_key[2], pub_key[3]);
+}
+#endif
+
 /* ------------------------------ Config -------------------------------- */
 
 #ifndef LORA_FREQ
@@ -932,6 +938,13 @@ void MyMesh::begin(FILESYSTEM *fs) {
   acl.load(_fs, self_id);
   // TODO: key_store.begin();
   region_map.load(_fs);
+
+#ifdef NESSO_DERIVE_ADMIN_PASSWORD
+  if (strcmp(_prefs.password, "password") == 0 || strcmp(_prefs.password, ADMIN_PASSWORD) == 0) {
+    deriveNessoPassword(_prefs.password, sizeof(_prefs.password), "n1-", self_id.pub_key);
+    _cli.savePrefs(_fs);
+  }
+#endif
 
   // establish default-scope
   {
