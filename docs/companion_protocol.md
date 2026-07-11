@@ -199,6 +199,39 @@ Byte 1: 0x03
 
 ---
 
+### Nesso N1 Companion Mode Query/Set
+
+**Purpose**: Query or change the saved companion mode on the Nesso N1 smart
+firmware without entering physical CLI rescue.
+
+This is a Nesso-specific extension. Other firmware targets may return
+`PACKET_ERROR` with `ERR_CODE_UNSUPPORTED_CMD`.
+
+**Command Format**:
+```
+Byte 0: 0x2C
+Byte 1: Optional action
+```
+
+Actions:
+
+```text
+omitted or 0x00  Query current mode
+0x01             Save BLE mode and reboot
+0x02             Save Wi-Fi mode and reboot
+```
+
+**Response**: `PACKET_OK` (0x00) with optional 32-bit little-endian mode value:
+
+```text
+0 = BLE
+1 = Wi-Fi
+```
+
+Set actions save the mode before scheduling a reboot.
+
+---
+
 ### 3. Get Channel Info
 
 **Purpose**: Retrieve information about a specific channel.

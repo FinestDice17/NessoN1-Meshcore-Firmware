@@ -86,6 +86,36 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 **Usage:**
 - `start ota`
 
+**Nesso N1 note:** The `Nesso_N1_companion_radio_smart_ota` build requires
+`KEY1` to be held while this command is run. It starts a local OTA AP and prints
+the generated password and `/update` URL.
+
+---
+
+### Switch Nesso companion mode
+**Usage:**
+- `mode`
+- `mode ble`
+- `mode wifi`
+- `start ble`
+- `start wifi`
+
+**Nesso N1 note:** `mode ble` and `mode wifi` save the companion mode and
+reboot. BLE mode runs BLE + USB + LoRa with Wi-Fi off. Wi-Fi mode runs Wi-Fi
+AP/TCP + USB + LoRa with BLE off. Hold `KEY1` during boot to temporarily force
+Wi-Fi mode, or `KEY2` to temporarily force BLE mode.
+
+---
+
+### Run board diagnostics
+**Usage:**
+- `doctor`
+- `nesso doctor`
+- `board doctor`
+
+**Nesso N1 output:** Expander state, battery voltage, boot voltage, power
+source, LoRa power/LNA state, NSS/BUSY/DIO1 pin state, key state, and uptime.
+
 ---
 
 ### Erase/Factory Reset
@@ -193,6 +223,14 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 
 ---
 
+### Show detailed board diagnostics
+**Usage:** `get board.doctor`
+
+**Nesso N1 output:** Same diagnostic string as `doctor`, formatted as a `get`
+response.
+
+---
+
 ## Configuration
 
 ### Radio
@@ -229,6 +267,22 @@ This document provides an overview of CLI commands that can be sent to MeshCore 
 **Default:** Varies by board
 
 **Notes:** This setting only controls the power level of the LoRa chip. Some nodes have an additional power amplifier stage which increases the total output. Refer to the node's manual for the correct setting to use. **Setting a value too high may violate the laws in your country.**
+
+---
+
+#### Apply a radio behavior preset
+**Usage:**
+- `preset`
+- `preset range`
+- `preset balanced`
+- `preset dense`
+
+**Nesso N1 notes:**
+- `range`: boosted receive gain and more acknowledgement resilience.
+- `balanced`: general-purpose defaults.
+- `dense`: busier local meshes with reduced receive gain and more forwarding delay.
+
+Presets are saved to preferences and do not require reflashing.
 
 ---
 
@@ -1107,20 +1161,23 @@ region save
 #### View the current power source
 **Usage:** `get pwrmgt.source`
 
-**Note:** Returns an error on boards without power management support.
+**Note:** Supported on nRF52 power-management boards and Nesso N1. Returns an
+error on boards without power management support.
 
 ---
 
 #### View the boot reset and shutdown reasons
 **Usage:** `get pwrmgt.bootreason`
 
-**Note:** Returns an error on boards without power management support.
+**Note:** nRF52 power-management boards only. Nesso N1 supports power source and
+boot voltage, but not reset/shutdown reason decoding.
 
 ---
 
 #### View the boot voltage
 **Usage:** `get pwrmgt.bootmv`
 
-**Note:** Returns an error on boards without power management support.
+**Note:** Supported on nRF52 power-management boards and Nesso N1. Returns an
+error on boards without power management support.
 
 ---
