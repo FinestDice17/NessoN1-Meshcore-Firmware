@@ -5,6 +5,10 @@
 #include "TxtDataHelpers.h"
 #include <RTClib.h>
 
+#if defined(NESSO_SMART_COMPANION)
+extern bool nessoHandleCompanionModeCommand(const char* command, char* reply, size_t reply_len) __attribute__((weak));
+#endif
+
 #ifndef BRIDGE_MAX_BAUD
 #define BRIDGE_MAX_BAUD 115200
 #endif
@@ -229,6 +233,60 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
       // send flood advert
       _callbacks->sendSelfAdvertisement(1500, true);  // longer delay, give CLI response time to be sent first
       strcpy(reply, "OK - Advert sent");
+    } else if (memcmp(command, "doctor", 6) == 0 ||
+               memcmp(command, "board doctor", 12) == 0 ||
+               memcmp(command, "nesso doctor", 12) == 0) {
+      if (!_board->formatBoardDiagnostics(reply, 160)) {
+        if (reply[0] == 0) strcpy(reply, "Board diagnostics unsupported");
+      }
+#if defined(NESSO_SMART_COMPANION)
+    } else if (nessoHandleCompanionModeCommand != nullptr &&
+               nessoHandleCompanionModeCommand(command, reply, 160)) {
+      return;
+#endif
+    } else if (memcmp(command, "preset ", 7) == 0) {
+      const char* preset = &command[7];
+      if (memcmp(preset, "range", 5) == 0) {
+        _prefs->airtime_factor = 1.5f;
+        _prefs->rx_delay_base = 0.0f;
+        _prefs->tx_delay_factor = 0.7f;
+        _prefs->direct_tx_delay_factor = 0.4f;
+        _prefs->path_hash_mode = 1;
+        _prefs->multi_acks = 1;
+        _prefs->interference_threshold = 0;
+        _prefs->rx_boosted_gain = 1;
+        _callbacks->setRxBoostedGain(true);
+        savePrefs();
+        strcpy(reply, "OK - range preset");
+      } else if (memcmp(preset, "dense", 5) == 0) {
+        _prefs->airtime_factor = 3.0f;
+        _prefs->rx_delay_base = 3.0f;
+        _prefs->tx_delay_factor = 1.0f;
+        _prefs->direct_tx_delay_factor = 0.6f;
+        _prefs->path_hash_mode = 1;
+        _prefs->multi_acks = 0;
+        _prefs->interference_threshold = 6;
+        _prefs->rx_boosted_gain = 0;
+        _callbacks->setRxBoostedGain(false);
+        savePrefs();
+        strcpy(reply, "OK - dense preset");
+      } else if (memcmp(preset, "balanced", 8) == 0) {
+        _prefs->airtime_factor = 1.0f;
+        _prefs->rx_delay_base = 0.0f;
+        _prefs->tx_delay_factor = 0.5f;
+        _prefs->direct_tx_delay_factor = 0.3f;
+        _prefs->path_hash_mode = 1;
+        _prefs->multi_acks = 0;
+        _prefs->interference_threshold = 0;
+        _prefs->rx_boosted_gain = 1;
+        _callbacks->setRxBoostedGain(true);
+        savePrefs();
+        strcpy(reply, "OK - balanced preset");
+      } else {
+        strcpy(reply, "Error: preset range|balanced|dense");
+      }
+    } else if (memcmp(command, "preset", 6) == 0) {
+      strcpy(reply, "presets: range, balanced, dense");
     } else if (memcmp(command, "clock sync", 10) == 0) {
       uint32_t curr = getRTCClock()->getCurrentTime();
       if (sender_timestamp > curr) {
@@ -239,10 +297,10 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
       } else {
         strcpy(reply, "ERR: clock cannot go backwards");
       }
-    } else if (memcmp(command, "start ota", 9) == 0) {
-      if (!_board->startOTAUpdate(_prefs->node_name, reply)) {
-        strcpy(reply, "Error");
-      }
+	    } else if (memcmp(command, "start ota", 9) == 0) {
+	      if (!_board->startOTAUpdate(_prefs->node_name, reply)) {
+	        if (reply[0] == 0) strcpy(reply, "Error");
+	      }
     } else if (memcmp(command, "clock", 5) == 0) {
       uint32_t now = getRTCClock()->getCurrentTime();
       DateTime dt = DateTime(now);
@@ -536,19 +594,23 @@ void CommonCLI::handleSetCmd(uint32_t sender_timestamp, char* command, char* rep
     StrHelper::strncpy(_prefs->guest_password, &config[15], sizeof(_prefs->guest_password));
     savePrefs();
     strcpy(reply, "OK");
-  } else if (memcmp(config, "prv.key ", 8) == 0) {
-    uint8_t prv_key[PRV_KEY_SIZE];
-    bool success = mesh::Utils::fromHex(prv_key, PRV_KEY_SIZE, &config[8]);
-    // only allow rekey if key is valid
+    } else if (memcmp(config, "prv.key ", 8) == 0) {
+#if ENABLE_PRIVATE_KEY_IMPORT
+      uint8_t prv_key[PRV_KEY_SIZE];
+      bool success = mesh::Utils::fromHex(prv_key, PRV_KEY_SIZE, &config[8]);
+      // only allow rekey if key is valid
     if (success && mesh::LocalIdentity::validatePrivateKey(prv_key)) {
       mesh::LocalIdentity new_id;
       new_id.readFrom(prv_key, PRV_KEY_SIZE);
       _callbacks->saveIdentity(new_id);
       strcpy(reply, "OK, reboot to apply! New pubkey: ");
       mesh::Utils::toHex(&reply[33], new_id.pub_key, PUB_KEY_SIZE);
-    } else {
-      strcpy(reply, "Error, bad key");
-    }
+      } else {
+        strcpy(reply, "Error, bad key");
+      }
+#else
+      strcpy(reply, "Error: private key import disabled");
+#endif
   } else if (memcmp(config, "name ", 5) == 0) {
     if (isValidName(&config[5])) {
       StrHelper::strncpy(_prefs->node_name, &config[5], sizeof(_prefs->node_name));
@@ -789,10 +851,14 @@ void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* rep
   } else if (memcmp(config, "guest.password", 14) == 0) {
     sprintf(reply, "> %s", _prefs->guest_password);
   } else if (sender_timestamp == 0 && memcmp(config, "prv.key", 7) == 0) {  // from serial command line only
+#if ENABLE_PRIVATE_KEY_EXPORT
     uint8_t prv_key[PRV_KEY_SIZE];
     int len = _callbacks->getSelfId().writeTo(prv_key, PRV_KEY_SIZE);
     mesh::Utils::toHex(tmp, prv_key, len);
     sprintf(reply, "> %s", tmp);
+#else
+    strcpy(reply, "ERROR: private key export disabled");
+#endif
   } else if (memcmp(config, "name", 4) == 0) {
     sprintf(reply, "> %s", _prefs->node_name);
   } else if (memcmp(config, "repeat", 6) == 0) {
@@ -899,19 +965,27 @@ void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* rep
     } else {
       sprintf(reply, "> %.3f", adc_mult);
     }
-  // Power management commands
-  } else if (memcmp(config, "pwrmgt.support", 14) == 0) {
-#ifdef NRF52_POWER_MANAGEMENT
-    strcpy(reply, "> supported");
-#else
-    strcpy(reply, "> unsupported");
-#endif
-  } else if (memcmp(config, "pwrmgt.source", 13) == 0) {
-#ifdef NRF52_POWER_MANAGEMENT
-    strcpy(reply, _board->isExternalPowered() ? "> external" : "> battery");
-#else
-    strcpy(reply, "ERROR: Power management not supported");
-#endif
+	  } else if (memcmp(config, "board.doctor", 12) == 0) {
+	    if (!_board->formatBoardDiagnostics(reply, 160)) {
+	      if (reply[0] == 0) strcpy(reply, "ERROR: unsupported");
+	    }
+	  // Power management commands
+	  } else if (memcmp(config, "pwrmgt.support", 14) == 0) {
+	#ifdef NRF52_POWER_MANAGEMENT
+	    strcpy(reply, "> supported");
+	#elif defined(NESSO_N1_BOARD)
+	    strcpy(reply, "> supported");
+	#else
+	    strcpy(reply, "> unsupported");
+	#endif
+	  } else if (memcmp(config, "pwrmgt.source", 13) == 0) {
+	#ifdef NRF52_POWER_MANAGEMENT
+	    strcpy(reply, _board->isExternalPowered() ? "> external" : "> battery");
+	#elif defined(NESSO_N1_BOARD)
+	    strcpy(reply, _board->isExternalPowered() ? "> external" : "> battery");
+	#else
+	    strcpy(reply, "ERROR: Power management not supported");
+	#endif
   } else if (memcmp(config, "pwrmgt.bootreason", 17) == 0) {
 #ifdef NRF52_POWER_MANAGEMENT
     sprintf(reply, "> Reset: %s; Shutdown: %s",
@@ -920,12 +994,14 @@ void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* rep
 #else
     strcpy(reply, "ERROR: Power management not supported");
 #endif
-  } else if (memcmp(config, "pwrmgt.bootmv", 13) == 0) {
-#ifdef NRF52_POWER_MANAGEMENT
-    sprintf(reply, "> %u mV", _board->getBootVoltage());
-#else
-    strcpy(reply, "ERROR: Power management not supported");
-#endif
+	  } else if (memcmp(config, "pwrmgt.bootmv", 13) == 0) {
+	#ifdef NRF52_POWER_MANAGEMENT
+	    sprintf(reply, "> %u mV", _board->getBootVoltage());
+	#elif defined(NESSO_N1_BOARD)
+	    sprintf(reply, "> %u mV", _board->getBootVoltage());
+	#else
+	    strcpy(reply, "ERROR: Power management not supported");
+	#endif
   } else {
     sprintf(reply, "??: %s", config);
   }
