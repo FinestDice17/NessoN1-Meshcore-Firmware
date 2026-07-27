@@ -3,6 +3,10 @@
 static constexpr uint8_t BQ27220_I2C_ADDR = 0x55;
 static constexpr uint8_t BQ27220_VOLTAGE_REG = 0x08;
 
+static constexpr uint8_t AW32001_I2C_ADDR = 0x49;
+static constexpr uint8_t AW32001_REG_CTRL0 = 0x01;
+static constexpr uint8_t AW32001_CEB_BIT = 3;
+
 static bool readI2C16LE(uint8_t address, uint8_t reg, uint16_t& value) {
   Wire.beginTransmission(address);
   Wire.write(reg);
@@ -12,6 +16,25 @@ static bool readI2C16LE(uint8_t address, uint8_t reg, uint16_t& value) {
   uint8_t hi = Wire.read();
   value = ((uint16_t)hi << 8) | lo;
   return true;
+}
+
+// The AW32001E charger's CEB (charge-enable, active-low) bit resets to 1
+// (charging disabled, VBUS power-path only) on every power-up and is never
+// set by the ROM/bootloader. Without this, the board runs fine on USB but
+// never actually charges the battery, no matter how long it's plugged in.
+static void enableCharging() {
+  Wire.beginTransmission(AW32001_I2C_ADDR);
+  Wire.write(AW32001_REG_CTRL0);
+  if (Wire.endTransmission(false) != 0) return;
+  if (Wire.requestFrom(AW32001_I2C_ADDR, (uint8_t)1) != 1) return;
+  uint8_t reg01 = Wire.read();
+
+  reg01 &= ~(1 << AW32001_CEB_BIT);
+
+  Wire.beginTransmission(AW32001_I2C_ADDR);
+  Wire.write(AW32001_REG_CTRL0);
+  Wire.write(reg01);
+  Wire.endTransmission();
 }
 
 #ifdef NESSO_DIAG
@@ -41,6 +64,7 @@ void NessoN1Board::begin() {
   ESP32Board::begin();
   Wire.setClock(400000);
   bool expanderOk = nessoExpander.begin();
+  enableCharging();
 
   pinMode(P_LORA_NSS, OUTPUT);
   digitalWrite(P_LORA_NSS, HIGH);
