@@ -4,8 +4,11 @@ static constexpr uint8_t BQ27220_I2C_ADDR = 0x55;
 static constexpr uint8_t BQ27220_VOLTAGE_REG = 0x08;
 
 static constexpr uint8_t AW32001_I2C_ADDR = 0x49;
-static constexpr uint8_t AW32001_REG_CTRL0 = 0x01;
+static constexpr uint8_t AW32001_REG_CTRL0 = 0x01;   // CEB (charge-enable) bit
+static constexpr uint8_t AW32001_REG_TIMER = 0x05;   // WATCHDOG bits
 static constexpr uint8_t AW32001_CEB_BIT = 3;
+static constexpr uint8_t AW32001_WATCHDOG_SHIFT = 5;
+static constexpr uint8_t AW32001_WATCHDOG_MASK = 0x3 << AW32001_WATCHDOG_SHIFT;
 
 static bool readI2C16LE(uint8_t address, uint8_t reg, uint16_t& value) {
   Wire.beginTransmission(address);
@@ -18,23 +21,45 @@ static bool readI2C16LE(uint8_t address, uint8_t reg, uint16_t& value) {
   return true;
 }
 
+static bool readAw32001Reg(uint8_t reg, uint8_t& value) {
+  Wire.beginTransmission(AW32001_I2C_ADDR);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom(AW32001_I2C_ADDR, (uint8_t)1) != 1) return false;
+  value = Wire.read();
+  return true;
+}
+
+static void writeAw32001Reg(uint8_t reg, uint8_t value) {
+  Wire.beginTransmission(AW32001_I2C_ADDR);
+  Wire.write(reg);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+
 // The AW32001E charger's CEB (charge-enable, active-low) bit resets to 1
 // (charging disabled, VBUS power-path only) on every power-up and is never
 // set by the ROM/bootloader. Without this, the board runs fine on USB but
 // never actually charges the battery, no matter how long it's plugged in.
+//
+// Any I2C write also switches the chip into "Host Mode", which arms its
+// watchdog timer (160s by default). If the host doesn't periodically pet it
+// via REG02H[6], the watchdog expiring turns BOTH the battery and system
+// FETs off momentarily -- a real, hard power-cycle of the whole board, not
+// just a firmware crash. Since this firmware has no periodic charger
+// upkeep, disable the watchdog outright (REG05H[6:5]=00) instead.
 static void enableCharging() {
-  Wire.beginTransmission(AW32001_I2C_ADDR);
-  Wire.write(AW32001_REG_CTRL0);
-  if (Wire.endTransmission(false) != 0) return;
-  if (Wire.requestFrom(AW32001_I2C_ADDR, (uint8_t)1) != 1) return;
-  uint8_t reg01 = Wire.read();
+  uint8_t reg01;
+  if (readAw32001Reg(AW32001_REG_CTRL0, reg01)) {
+    reg01 &= ~(1 << AW32001_CEB_BIT);
+    writeAw32001Reg(AW32001_REG_CTRL0, reg01);
+  }
 
-  reg01 &= ~(1 << AW32001_CEB_BIT);
-
-  Wire.beginTransmission(AW32001_I2C_ADDR);
-  Wire.write(AW32001_REG_CTRL0);
-  Wire.write(reg01);
-  Wire.endTransmission();
+  uint8_t reg05;
+  if (readAw32001Reg(AW32001_REG_TIMER, reg05)) {
+    reg05 &= ~AW32001_WATCHDOG_MASK;
+    writeAw32001Reg(AW32001_REG_TIMER, reg05);
+  }
 }
 
 #ifdef NESSO_DIAG
