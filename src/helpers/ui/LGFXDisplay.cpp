@@ -103,8 +103,8 @@ uint16_t LGFXDisplay::getTextWidth(const char* str) {
 
 void LGFXDisplay::endFrame() {
   display->startWrite();
-  if (UI_ZOOM != 1) {
-    buffer.pushRotateZoom(display, display->width()/2, display->height()/2 , 0, UI_ZOOM, UI_ZOOM);
+  if (UI_ZOOM != 1 || _contentRotation != 0) {
+    buffer.pushRotateZoom(display, display->width()/2, display->height()/2, _contentRotation, UI_ZOOM, UI_ZOOM);
   } else {
     buffer.pushSprite(display, 0, 0);
   }

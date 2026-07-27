@@ -1,4 +1,7 @@
 #include "NessoN1Board.h"
+#ifdef NESSO_AUTO_FLIP
+#include "NessoOrientation.h"
+#endif
 
 static constexpr uint8_t BQ27220_I2C_ADDR = 0x55;
 static constexpr uint8_t BQ27220_VOLTAGE_REG = 0x08;
@@ -90,6 +93,9 @@ void NessoN1Board::begin() {
   Wire.setClock(400000);
   bool expanderOk = nessoExpander.begin();
   enableCharging();
+#ifdef NESSO_AUTO_FLIP
+  nessoOrientationBegin();
+#endif
 
   pinMode(P_LORA_NSS, OUTPUT);
   digitalWrite(P_LORA_NSS, HIGH);

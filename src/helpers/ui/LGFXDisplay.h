@@ -16,6 +16,7 @@ protected:
 
   bool _isOn = false;
   int _color = TFT_WHITE;
+  int _contentRotation = 0;  // degrees; applied when compositing the sprite in endFrame()
 
 public:
   LGFXDisplay(int w, int h, LGFX_Device &disp)
@@ -36,4 +37,10 @@ public:
   uint16_t getTextWidth(const char* str) override;
   void endFrame() override;
   virtual bool getTouch(int *x, int *y);
+
+  // Rotate rendered content by the given angle (e.g. 180) when compositing
+  // to the panel, without touching the panel's own native rotation/MADCTL
+  // state. Useful for panels whose native rotation modes aren't correctly
+  // calibrated (offsets, etc.) beyond their one default orientation.
+  void setContentRotation(int degrees) { _contentRotation = degrees; }
 };

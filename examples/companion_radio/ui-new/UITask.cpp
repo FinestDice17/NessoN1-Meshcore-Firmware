@@ -5,6 +5,9 @@
 #ifdef WIFI_SSID
   #include <WiFi.h>
 #endif
+#ifdef NESSO_AUTO_FLIP
+  #include "NessoOrientation.h"
+#endif
 
 #ifndef AUTO_OFF_MILLIS
   #define AUTO_OFF_MILLIS     15000   // 15 seconds
@@ -758,6 +761,10 @@ bool UITask::isButtonPressed() const {
 }
 
 void UITask::loop() {
+#ifdef NESSO_AUTO_FLIP
+  nessoOrientationLoop();
+#endif
+
   char c = 0;
 #if UI_HAS_JOYSTICK
   int ev = user_btn.check();

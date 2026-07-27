@@ -67,3 +67,13 @@ void NessoMeshDisplay::turnOff() {
     _isOn = false;
   }
 }
+
+void NessoMeshDisplay::setFlipped(bool flipped) {
+  if (flipped == _flipped) return;
+  _flipped = flipped;
+  // The panel's own native rotation modes are only calibrated (via
+  // offset_x/offset_y in NessoPanel) for the default orientation set at
+  // begin() -- switching the controller's own rotation state doesn't
+  // actually change what's visible. Flip the rendered content instead.
+  setContentRotation(flipped ? 180 : 0);
+}
