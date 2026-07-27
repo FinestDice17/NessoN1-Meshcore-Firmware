@@ -387,7 +387,17 @@ void MyMesh::onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path
 }
 
 static int sort_by_recent(const void *a, const void *b) {
-  return ((AdvertPath *) b)->recv_timestamp - ((AdvertPath *) a)->recv_timestamp;
+  // Explicit comparison rather than subtracting two uint32_t timestamps and
+  // returning as int -- that wraps around whenever the difference exceeds
+  // INT32_MAX, which flips the sort order and can push the only real entry
+  // out of the UI's top-N window (e.g. if the RTC clock is unset/uninitialized
+  // and reports a timestamp above ~2.1 billion, as commonly happens before
+  // the clock has been synced).
+  uint32_t ta = ((AdvertPath *) a)->recv_timestamp;
+  uint32_t tb = ((AdvertPath *) b)->recv_timestamp;
+  if (tb > ta) return 1;
+  if (tb < ta) return -1;
+  return 0;
 }
 
 int MyMesh::getRecentlyHeard(AdvertPath dest[], int max_num) {
