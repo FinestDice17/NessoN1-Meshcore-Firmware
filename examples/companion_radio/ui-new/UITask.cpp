@@ -123,9 +123,9 @@ class HomeScreen : public UIScreen {
     if (batteryPercentage < 0) batteryPercentage = 0; // Clamp to 0%
     if (batteryPercentage > 100) batteryPercentage = 100; // Clamp to 100%
 
-    // battery icon
-    int iconWidth = 24;
-    int iconHeight = 10;
+    // battery icon (sized to comfortably fit "100%" inside)
+    int iconWidth = 34;
+    int iconHeight = 12;
     int iconX = display.width() - iconWidth - 5; // Position the icon near the top-right corner
     int iconY = 0;
     display.setColor(DisplayDriver::GREEN);
@@ -139,6 +139,23 @@ class HomeScreen : public UIScreen {
     // fill the battery based on the percentage
     int fillWidth = (batteryPercentage * (iconWidth - 4)) / 100;
     display.fillRect(iconX + 2, iconY + 2, fillWidth, iconHeight - 4);
+
+    // percentage text, centered inside the icon. Drawn on its own dark
+    // backdrop so it stays legible regardless of how much of the icon
+    // behind it is green fill vs. empty -- plain light text on green
+    // fill has poor contrast since both are light colors.
+    char pct_tmp[6];
+    sprintf(pct_tmp, "%d%%", batteryPercentage);
+    display.setTextSize(1);
+    int pct_width = display.getTextWidth(pct_tmp);
+    int pct_x = iconX + (iconWidth - pct_width) / 2;
+
+    display.setColor(DisplayDriver::DARK);
+    display.fillRect(pct_x - 1, iconY + 1, pct_width + 2, iconHeight - 2);
+
+    display.setColor(DisplayDriver::LIGHT);
+    display.setCursor(pct_x, iconY + 2);
+    display.print(pct_tmp);
 
     // show muted icon if buzzer is muted
 #ifdef PIN_BUZZER
