@@ -236,7 +236,6 @@ public:
       }
     } else if (_page == HomePage::RECENT) {
       the_mesh.getRecentlyHeard(recent, UI_RECENT_LIST_SIZE);
-      display.setColor(DisplayDriver::GREEN);
       int y = 20;
       for (int i = 0; i < UI_RECENT_LIST_SIZE; i++, y += 11) {
         auto a = &recent[i];
@@ -250,13 +249,43 @@ public:
           sprintf(tmp, "%dh", secs / (60*60));
         }
 
-        int timestamp_width = display.getTextWidth(tmp);
-        int max_name_width = display.width() - timestamp_width - 1;
+        // hop count -- how many nodes this advert was relayed through
+        // ('D' = heard directly, no relay)
+        int hops = a->path_len & 63;
+        char hop_tmp[6];
+        if (hops == 0) {
+          strcpy(hop_tmp, "[D]");
+        } else if (hops > 9) {
+          strcpy(hop_tmp, "[9+]");
+        } else {
+          sprintf(hop_tmp, "[%d]", hops);
+        }
 
+        // SNR of the last hop into this node, at time of receipt
+        char snr_tmp[8];
+        sprintf(snr_tmp, "%.0fdB", a->snr);
+
+        const int gap = 6;
+        int timestamp_width = display.getTextWidth(tmp);
+        int hop_width = display.getTextWidth(hop_tmp);
+        int snr_width = display.getTextWidth(snr_tmp);
+        int max_name_width = display.width() - timestamp_width - hop_width - snr_width - gap*3;
+
+        display.setColor(DisplayDriver::GREEN);
         char filtered_recent_name[sizeof(a->name)];
         display.translateUTF8ToBlocks(filtered_recent_name, a->name, sizeof(filtered_recent_name));
         display.drawTextEllipsized(0, y, max_name_width, filtered_recent_name);
-        display.setCursor(display.width() - timestamp_width - 1, y);
+
+        display.setColor(DisplayDriver::YELLOW);
+        display.setCursor(display.width() - timestamp_width - gap - snr_width - gap - hop_width, y);
+        display.print(hop_tmp);
+
+        display.setColor(DisplayDriver::LIGHT);
+        display.setCursor(display.width() - timestamp_width - gap - snr_width, y);
+        display.print(snr_tmp);
+
+        display.setColor(DisplayDriver::GREEN);
+        display.setCursor(display.width() - timestamp_width, y);
         display.print(tmp);
       }
     } else if (_page == HomePage::RADIO) {
